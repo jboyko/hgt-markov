@@ -2,13 +2,15 @@
 #'
 #' @param tree phylo object
 #' @param Q 2x2 rate matrix (rownames/colnames "0","1")
-#' @param lambda HGT rate (only 0 supported in this version)
+#' @param lambda HGT rate (0 = pure Mk)
 #' @param seed integer random seed
 #' @return one-row data.frame with q01_true, q10_true, q01_hat, q10_hat
 run_one_rep <- function(tree, Q, lambda = 0, seed = NULL) {
-  if (lambda != 0) stop("lambda != 0 not yet implemented")
-
-  sim <- simulate_mk(tree, Q, root_freq = c(0.5, 0.5), seed = seed)
+  sim <- if (lambda == 0) {
+    simulate_mk(tree, Q, root_freq = c(0.5, 0.5), seed = seed)
+  } else {
+    simulate_hgt(tree, Q, lambda = lambda, root_freq = c(0.5, 0.5), seed = seed)
+  }
 
   tip_data <- data.frame(
     taxon = names(sim$tip_states),
