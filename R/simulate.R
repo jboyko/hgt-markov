@@ -1,3 +1,23 @@
+#' Simulate a heterochronous tree from a birth-death-sampling process
+#'
+#' @param n_target approximate number of serially-sampled tips
+#' @param seed integer random seed
+#' @return phylo object with non-ultrametric branch lengths in time units
+simulate_tree <- function(n_target = 100, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  # lambda=2, mu=0.5, serial sampling probability 0.3: produces ~30% heterochronous tips.
+  # Condition on n_target serially-sampled tips (rho=0 so no present-day sampling burst).
+  trees <- TreeSim::sim.bdsky.stt(
+    n          = n_target,
+    lambdasky  = 2.0,
+    deathsky   = 0.5,
+    timesky    = 0,
+    sampprobsky = 0.3,
+    rho        = 0
+  )
+  trees[[1L]]
+}
+
 # Returns a closure that computes expm(Q*t), using eigen decomp with expm fallback.
 make_expm_fn <- function(Q) {
   e     <- tryCatch(eigen(Q), error = function(err) NULL)

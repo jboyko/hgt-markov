@@ -1,11 +1,13 @@
 #' Run one simulation-and-inference replicate
 #'
-#' @param tree phylo object
 #' @param Q 2x2 rate matrix (rownames/colnames "0","1")
 #' @param lambda HGT rate (0 = pure Mk)
 #' @param seed integer random seed
+#' @param tree phylo object; if NULL a BD-sampling tree is simulated via simulate_tree()
+#' @param n_target tip count passed to simulate_tree() when tree is NULL
 #' @return one-row data.frame with q01_true, q10_true, q01_hat, q10_hat
-run_one_rep <- function(tree, Q, lambda = 0, seed = NULL) {
+run_one_rep <- function(Q, lambda = 0, seed = NULL, tree = NULL, n_target = 100L) {
+  if (is.null(tree)) tree <- simulate_tree(n_target = n_target, seed = seed)
   sim <- if (lambda == 0) {
     simulate_mk(tree, Q, root_freq = c(0.5, 0.5), seed = seed)
   } else {
