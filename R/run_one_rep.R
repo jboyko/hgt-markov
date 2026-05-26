@@ -1,18 +1,24 @@
 #' Run one simulation-and-inference replicate
 #'
 #' @param Q 2x2 rate matrix (rownames/colnames "0","1")
-#' @param lambda HGT rate (0 = pure Mk)
+#' @param generator one of "mk_null", "mk_hgt", "hmm_null"
+#' @param lambda HGT rate; used when generator="mk_hgt"
+#' @param alpha hidden-category transition rate; used when generator="hmm_null"
+#' @param Q2 2x2 rate matrix for hidden category 2; defaults to Q when generator="hmm_null"
 #' @param seed integer random seed
 #' @param tree phylo object; if NULL a BD-sampling tree is simulated via simulate_tree()
 #' @param n_target tip count passed to simulate_tree() when tree is NULL
 #' @return one-row data.frame with q01_true, q10_true, q01_hat, q10_hat
-run_one_rep <- function(Q, lambda = 0, seed = NULL, tree = NULL, n_target = 100L) {
+run_one_rep <- function(Q, generator = "mk_null", lambda = 0, alpha = 0.5, Q2 = NULL,
+                        seed = NULL, tree = NULL, n_target = 100L) {
   if (is.null(tree)) tree <- simulate_tree(n_target = n_target, seed = seed)
-  sim <- if (lambda == 0) {
-    simulate_mk(tree, Q, root_freq = c(0.5, 0.5), seed = seed)
-  } else {
-    simulate_hgt(tree, Q, lambda = lambda, root_freq = c(0.5, 0.5), seed = seed)
-  }
+  sim <- switch(generator,
+    mk_null  = simulate_mk(tree, Q, root_freq = c(0.5, 0.5), seed = seed),
+    mk_hgt   = simulate_hgt(tree, Q, lambda = lambda, root_freq = c(0.5, 0.5), seed = seed),
+    hmm_null = simulate_hmm(tree, Q1 = Q, Q2 = if (is.null(Q2)) Q else Q2,
+                            alpha = alpha, root_freq = c(0.5, 0.5), seed = seed),
+    stop("generator must be one of 'mk_null', 'mk_hgt', 'hmm_null'")
+  )
 
   tip_data <- data.frame(
     taxon = names(sim$tip_states),

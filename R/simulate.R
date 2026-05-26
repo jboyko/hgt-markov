@@ -127,6 +127,66 @@ simulate_hgt <- function(tree, Q, lambda = 0, root_freq = c(0.5, 0.5), seed = NU
   list(tip_states = tip_states, node_states = node_states, n_hgt_events = n_hgt_events)
 }
 
+#' Simulate a binary character under a 2-category HMM-ARD model (lambda=0)
+#'
+#' @param tree phylo object (ape, time-calibrated)
+#' @param Q1 2x2 rate matrix for hidden category 1 (rownames/colnames "0","1")
+#' @param Q2 2x2 rate matrix for hidden category 2 (rownames/colnames "0","1")
+#' @param alpha symmetric transition rate between hidden categories
+#' @param root_freq numeric(2) root state frequencies over observed states
+#' @param seed integer random seed
+#' @return list: tip_states, node_states (observed 0-indexed integers)
+simulate_hmm <- function(tree, Q1, Q2, alpha, root_freq = c(0.5, 0.5), seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+
+  fix_diag <- function(Q) { diag(Q) <- 0; diag(Q) <- -rowSums(Q); Q }
+  Q1 <- fix_diag(Q1)
+  Q2 <- fix_diag(Q2)
+
+  # Joint state space: (obs, cat) = (0,R1),(1,R1),(0,R2),(1,R2) -> indices 1..4
+  # obs: 1=(0,R1), 2=(1,R1), 3=(0,R2), 4=(1,R2)
+  Q_full <- matrix(0, 4, 4)
+  Q_full[1, 2] <- Q1[1, 2]; Q_full[2, 1] <- Q1[2, 1]  # within R1
+  Q_full[3, 4] <- Q2[1, 2]; Q_full[4, 3] <- Q2[2, 1]  # within R2
+  Q_full[1, 3] <- alpha;    Q_full[3, 1] <- alpha      # (0,R1)<->(0,R2)
+  Q_full[2, 4] <- alpha;    Q_full[4, 2] <- alpha      # (1,R1)<->(1,R2)
+  diag(Q_full) <- -rowSums(Q_full)
+
+  expm_full <- make_expm_fn(Q_full)
+
+  tree    <- ape::reorder.phylo(tree, "postorder")
+  n_tips  <- length(tree$tip.label)
+  n_nodes <- tree$Nnode
+  root_node <- n_tips + 1L
+
+  # joint states: 1=(0,R1), 2=(1,R1), 3=(0,R2), 4=(1,R2)
+  joint_states <- integer(n_tips + n_nodes)
+  # root: draw observed state, then pick category uniformly
+  obs_root <- sample.int(2L, 1L, prob = root_freq / sum(root_freq))  # 1 or 2
+  cat_root <- sample.int(2L, 1L)  # category 1 or 2
+  joint_states[root_node] <- (cat_root - 1L) * 2L + obs_root  # 1..4
+
+  anc <- tree$edge[, 1L]
+  des <- tree$edge[, 2L]
+  el  <- tree$edge.length
+  n_edges <- nrow(tree$edge)
+
+  for (i in n_edges:1L) {
+    P <- expm_full(el[i])
+    joint_states[des[i]] <- sample.int(4L, 1L, prob = P[joint_states[anc[i]], ])
+  }
+
+  # Extract observed state: joint 1,3 -> obs 0; joint 2,4 -> obs 1
+  obs_from_joint <- function(j) (j %% 2L == 0L) * 1L  # 1->0, 2->1, 3->0, 4->1
+
+  tip_states  <- obs_from_joint(joint_states[seq_len(n_tips)])
+  names(tip_states) <- tree$tip.label
+  node_states <- obs_from_joint(joint_states[root_node:(n_tips + n_nodes)])
+  names(node_states) <- as.character(root_node:(n_tips + n_nodes))
+
+  list(tip_states = tip_states, node_states = node_states)
+}
+
 #' Simulate a binary character on a phylogeny under the Mk model
 #'
 #' @param tree phylo object (ape)
