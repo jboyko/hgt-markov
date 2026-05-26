@@ -8,8 +8,12 @@
 #' @param seed integer random seed
 #' @param tree phylo object; if NULL a BD-sampling tree is simulated via simulate_tree()
 #' @param n_target tip count passed to simulate_tree() when tree is NULL
-#' @return data.frame with four rows (one per model: ER, ARD, HMM2, HMM3) and columns
-#'   model, aicc, loglik, converged, conv_note, aicc_winner, q01_true, q10_true
+#' @return list with:
+#'   $fits: data.frame with four rows (one per model: ER, ARD, HMM2, HMM3) and columns
+#'     model, aicc, loglik, converged, conv_note, aicc_winner, q01_true, q10_true;
+#'   $ard_q_hat: named numeric(2) c(q01, q10) from ARD fit, or NA if failed;
+#'   $node_probs_ard: n_internal x 2 matrix of marginal posteriors from ARD fit, or NULL;
+#'   $node_states_true: integer vector of true states at internal nodes (0-indexed)
 run_one_rep <- function(Q, generator = "mk_null", lambda = 0, alpha = 0.5, Q2 = NULL,
                         seed = NULL, tree = NULL, n_target = 100L) {
   if (is.null(tree)) tree <- simulate_tree(n_target = n_target, seed = seed)
@@ -35,7 +39,7 @@ run_one_rep <- function(Q, generator = "mk_null", lambda = 0, alpha = 0.5, Q2 = 
   )
 
   fit_model <- function(spec) {
-    result <- tryCatch({
+    tryCatch({
       suppressMessages(utils::capture.output(
         fit <- corHMM::corHMM(
           phy         = tree,
@@ -50,15 +54,15 @@ run_one_rep <- function(Q, generator = "mk_null", lambda = 0, alpha = 0.5, Q2 = 
       aicc <- fit$AICc
       ll   <- fit$loglik
       ok   <- is.finite(aicc) && is.finite(ll)
-      list(aicc = if (ok) aicc else NA_real_,
-           loglik = if (ok) ll else NA_real_,
+      list(aicc      = if (ok) aicc else NA_real_,
+           loglik    = if (ok) ll   else NA_real_,
            converged = ok,
-           conv_note = if (ok) NA_character_ else "non-finite AICc/loglik")
+           conv_note = if (ok) NA_character_ else "non-finite AICc/loglik",
+           raw_fit   = if (ok) fit else NULL)
     }, error = function(e) {
       list(aicc = NA_real_, loglik = NA_real_,
-           converged = FALSE, conv_note = conditionMessage(e))
+           converged = FALSE, conv_note = conditionMessage(e), raw_fit = NULL)
     })
-    result
   }
 
   fits <- lapply(model_specs, fit_model)
@@ -71,16 +75,31 @@ run_one_rep <- function(Q, generator = "mk_null", lambda = 0, alpha = 0.5, Q2 = 
     NA_character_
   }
 
-  data.frame(
-    model      = names(model_specs),
-    aicc       = aiccs,
-    loglik     = vapply(fits, `[[`, numeric(1), "loglik"),
-    converged  = vapply(fits, `[[`, logical(1), "converged"),
-    conv_note  = vapply(fits, `[[`, character(1), "conv_note"),
+  fits_df <- data.frame(
+    model       = names(model_specs),
+    aicc        = aiccs,
+    loglik      = vapply(fits, `[[`, numeric(1), "loglik"),
+    converged   = vapply(fits, `[[`, logical(1), "converged"),
+    conv_note   = vapply(fits, `[[`, character(1), "conv_note"),
     aicc_winner = winner,
-    q01_true   = Q[1, 2],
-    q10_true   = Q[2, 1],
+    q01_true    = Q[1, 2],
+    q10_true    = Q[2, 1],
     stringsAsFactors = FALSE,
-    row.names  = NULL
+    row.names   = NULL
+  )
+
+  ard_raw <- fits[["ARD"]]$raw_fit
+  ard_q_hat <- if (!is.null(ard_raw)) {
+    c(q01 = ard_raw$solution["0", "1"], q10 = ard_raw$solution["1", "0"])
+  } else {
+    c(q01 = NA_real_, q10 = NA_real_)
+  }
+  node_probs_ard <- if (!is.null(ard_raw)) ard_raw$states else NULL
+
+  list(
+    fits             = fits_df,
+    ard_q_hat        = ard_q_hat,
+    node_probs_ard   = node_probs_ard,
+    node_states_true = unname(sim$node_states)
   )
 }

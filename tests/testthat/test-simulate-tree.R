@@ -59,11 +59,11 @@ test_that("run_one_rep runs end-to-end on a freshly simulated BD-sampling tree a
   Q <- matrix(c(-0.3, 0.3, 0.2, -0.2), nrow = 2, byrow = TRUE)
   rownames(Q) <- colnames(Q) <- c("0", "1")
 
-  result <- run_one_rep(Q = Q, lambda = 0.5, seed = 7)
+  result <- run_one_rep(Q = Q, generator = "mk_hgt", lambda = 0.5, seed = 7)
 
-  expect_s3_class(result, "data.frame")
-  expect_equal(nrow(result), 1L)
-  expect_named(result, c("q01_true", "q10_true", "q01_hat", "q10_hat"), ignore.order = TRUE)
-  expect_true(is.finite(result$q01_hat))
-  expect_true(is.finite(result$q10_hat))
+  expect_type(result, "list")
+  expect_s3_class(result$fits, "data.frame")
+  expect_equal(nrow(result$fits), 4L)
+  expect_true(is.finite(result$ard_q_hat["q01"]))
+  expect_true(is.finite(result$ard_q_hat["q10"]))
 })
